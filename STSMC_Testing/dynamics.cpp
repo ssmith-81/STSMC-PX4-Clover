@@ -10,7 +10,7 @@
 using namespace std;
 using namespace matrix;
 
-float _dt = 0.02; // time step --> Global variable
+float _dt = 0.02; // time step --> Global variable.
 
 Vector2f SMC::x_dynamics(const float U, const float i, const Vector3f XI)
 {
