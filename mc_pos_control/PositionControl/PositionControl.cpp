@@ -127,6 +127,54 @@ bool PositionControl::update(const float dt)
 
 void PositionControl::SMC_control(const float dt)
 {
+	#if STSMC
+
+	// Position controller gains
+		float k1x = 3, k2x = 4;
+		float k1y = 3, k2y = 3;
+		float k1z = 4, k2z = 3;
+
+	//Error gains
+		float c1x = 3, c1y = 3, c1z = 3;
+
+	if (isfinite(Uxx) == 0){ // Use PX4 module
+        Uxx = 0.0f;
+    }
+
+	// Sliding manifold
+			// Error definitions:
+		Vector3f e_1 = _pos - _pos_sp; //x(0)-x_1d;
+		Vector3f e_2 = _vel - _vel_sp; //x(1) - x_2d;
+
+		float sx = c1x*e_1(0) + (e_2(0));
+		float sx = c1y*e_1(1) + (e_2(1));
+		float sx = c1z*e_1(2) + (e_2(2));
+
+	// Use saturation function instead of sign function
+		float sat_sx = ControlMath::sat(sx);
+		float sat_sy = ControlMath::sat(sy);
+		float sat_sy = ControlMath::sat(sz);
+
+		sat_sxin += sat_sx*dt;
+		sat_syin += sat_sy*dt;
+		sat_szin += sat_sz*dt;
+
+	//Switching control terms
+        sign_sx_int += k2x*sign(sx)*dt;
+		sign_sy_int += k2y*sign(sy)*dt;
+		sign_sz_int += k2z*sign(sz)*dt;
+	
+	// Define virtual controllers
+		float U_x = 0, U_y = 0, U_z = 0;
+	
+	float x_dot2d = (_vel_sp(0)-pre_vel_x)/dt;  // define pre values in hpp file as zerp
+	float y_dot2d = (_vel_sp(1) - pre_vel_y)/dt;
+	float z_dot2d = (_vel_sp(2) - pre_vel_z)/dt;
+	
+	U_x = -c1x*(e_2) + x_dot2d - k1x*sqrt(abs(sx))*sign(sx) - sign_sx_int;
+
+
+	#endif
 
 	#if HOSMO_STSMC
 
@@ -203,7 +251,7 @@ void PositionControl::SMC_control(const float dt)
 		float Uz = 0;
 
 		Ux = -c1x*x_hat(1) + c1x*_vel_sp(0) - x_hat(2) - lambda2x*cbrt(fabsf(x_tilde))*sign(x_tilde)*dt + ;
-
+	#endif
 
 
 }
