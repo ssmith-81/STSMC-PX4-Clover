@@ -16,6 +16,7 @@ class SMC
         // min - minimum value of manipulated variable
         float SMC_control(const Vector2f x, const float ref);
         Vector3f observer(const float U,  const Vector2f x);
+        float sat(const float k);
         // Function to test the observer alone with the PID controller before testing STSMC
 
         // System dynamics functions
@@ -83,6 +84,9 @@ class SMC
         float Kp = 5;
         float Kd = 2;
         double pre_error = 0;
+
+        // Saturation
+        //float k{};
             
 };
 

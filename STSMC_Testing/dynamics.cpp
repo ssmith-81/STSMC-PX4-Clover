@@ -12,6 +12,10 @@ using namespace matrix;
 
 float _dt = 0.02; // time step --> Global variable.
 
+
+ // Value Storing --> Set them globally so we can store values in any function 
+    ofstream dist, est, pos, input, dist_hat, step;
+    
 Vector2f SMC::x_dynamics(const float U, const float i, const Vector3f XI)
 {
     
@@ -30,7 +34,7 @@ Vector2f SMC::x_dynamics(const float U, const float i, const Vector3f XI)
 
     
     x(0) = x(0) + (x(1))*_dt;
-    x(1) = x(1) + (U)*_dt; //+ XI(0)*_dt; //+ sin(i); // + XI(0);
+    x(1) = x(1) + (U)*_dt + XI(0)*_dt; //+ sin(i); // + XI(0);
 
    // cout << x(0)<< endl;
 
@@ -47,6 +51,7 @@ Vector3f SMC::disturbances(const float i)
         // z-dynamic disturbance
         XI(2) = 0.2*sin(i);
 
+        dist << XI(0)<<endl;
         return XI;
     }
 
@@ -122,7 +127,22 @@ float SMC::trajectory(const float i)
     #endif
 }
 
+// Saturation function 
+float SMC::sat(float k){
+
+    if (k< -1.0f){
+        k = -1;
+    }else if (k  > 1){
+        k = 1;
+    }else{
+        k = k;
+    }
+    return k;
+}
+
 float SMC::SMC_control(const Vector2f x, const float ref){
+
+    
 
     // Position controller gains
 		float k1x = 3, k2x = 4;
@@ -145,8 +165,8 @@ float SMC::SMC_control(const Vector2f x, const float ref){
             float x_dot2d = (x_2d - pre_x_2d)/_dt;
 
 
-    #define STSMC true
-    #define STSMC_Observer false
+    #define STSMC false
+    #define STSMC_Observer true
 
     #if STSMC
     // Sliding manifold
@@ -176,6 +196,56 @@ float SMC::SMC_control(const Vector2f x, const float ref){
     #endif
 
     #if STSMC_Observer
+   
+    // Define estimation errors
+			float x_tilde = x(0) - x_hat(0);
+
+    
+    // Observer based control
+    float u_x = Uxx;
+
+    // Define saturation functions (smoothing functions) to replace sign(s) in virtual controllers
+			float epsilon = 0.000001;
+			float sat_x = SMC::sat(x_tilde/epsilon);
+
+    // Compute estimates with observer
+
+				// x-dynamics observer  // x_hat += x_hat... --> integral
+                x_hat(0) = x_hat(0) + (x_hat(1)*_dt) + lambda1x*cbrt(fabsf(x_tilde)*fabsf(x_tilde))*sign(x_tilde)*_dt;
+				x_hat(1) = x_hat(1) + (x_hat(2)*_dt) + lambda2x*cbrt(fabsf(x_tilde))*sign(x_tilde)*_dt + (u_x)*_dt;
+				//x_hat(2) = x_hat(2) + lambda3x*sign(x_tilde)*_dt;  
+                // Or use smoothing function for disturbance estimation:
+                x_hat(2) = x_hat(2) + lambda3x*sat_x*_dt;
+    
+     // Sliding manifold
+			// Error definitions:
+		    float e_1 = x(0)-x_1d;
+			float e2_hat = x_hat(1) - x_2d;
+
+            float sx = c1x*e_1 + (e2_hat);
+
+    //Switching control terms
+        sign_sx_int += k2x*sign(sx)*_dt;
+
+    // Define virtual controllers
+		float Ux = 0;
+
+        Ux = -c1x*x_hat(1) + c1x*x_2d - x_hat(2) - lambda2x*cbrt(fabsf(x_tilde))*sign(x_tilde)*_dt + x_dot2d - k1x*sqrt(abs(sx))*sign(sx) - sign_sx_int; ;
+
+       float U = Ux;
+
+    // Save references to previous references:
+    
+        pre_x_1d = x_1d;
+        pre_x_2d = x_2d;
+        Uxx = Ux;
+    // Store Values
+    dist_hat << x_hat(2) <<endl;
+    est << x_hat(0) << endl;
+
+   
+
+        return U;
 
     #endif 
     
@@ -202,12 +272,16 @@ Vector3f SMC::observer(const float U, const Vector2f x){
 int main() {
 
     SMC SMC;
-    ofstream data, meta, beta;
-    data.open("datay.txt");
-    meta.open("datax.txt");
-    beta.open("data.txt");
+    
+    // --> open these outside the for loop so we only open once. Opening twice ill lead to one value being stored
+    pos.open("position.txt");
+    input.open("input.txt");
+    dist_hat.open("dist_hat.txt");
+    dist.open("dist.txt");
+    est.open("x_hat.txt");
+    step.open("time.txt");
 
-    float U;
+ 
 for (float i = 0; i < 10; i=i+0.02) {
 
     // Obtain reference trajectory
@@ -223,7 +297,7 @@ for (float i = 0; i < 10; i=i+0.02) {
        // U = 5.0f - SMC.x(0); // Feed the feedback error into the system
 
        // U = SMC.PID(SMC.x,SMC.ref); // Implement PID control on the system dynamics
-        U = SMC.SMC_control(SMC.x,SMC.ref);
+        float U = SMC.SMC_control(SMC.x,SMC.ref);
 
         // Ensure the control input is finite, set to zero if it is not
          if (isfinite(U) == 0){
@@ -237,7 +311,7 @@ for (float i = 0; i < 10; i=i+0.02) {
         //cout << i;
         //cout << x(0);
         //U = 5+x(0);
-        cout<<U<<endl;
+        //cout<<U<<endl;
         //cout << U<<endl;
 
         // Observer testing function
@@ -245,15 +319,21 @@ for (float i = 0; i < 10; i=i+0.02) {
        // SMC.x_hat = SMC.observer(U,SMC.x);
 
          // Store data in txt file
-        meta<< i <<endl;
-        data << SMC.x(0)<<endl;
-        beta << U <<endl;
-       // data << SMC.x_hat(2) <<endl;
+        step<< i <<endl;
+        pos << SMC.x(0)<<endl;
+        input << U <<endl;
+     
         
          }
-         data.close();
-         meta.close();
-         beta.close();
+         step.close();
+         pos.close();
+         input.close();
+         dist_hat.close();
+         dist.close();
+         est.close();
+         step.close();
+        
+         
 return 0;
    
 }
