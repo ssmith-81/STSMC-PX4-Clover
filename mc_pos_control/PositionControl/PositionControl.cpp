@@ -272,10 +272,7 @@ void PositionControl::SMC_control(const float dt)
 		Ux = -c1x*x_hat(1) + c1x*_vel_sp(0) - x_hat(2) - lambda2x*cbrt(fabsf(x_tilde))*sign(x_tilde)*dt + ;
 	#endif
 
-
-}
-
-_accelerationControl();
+	_accelerationControl();
 
 //-----------------------------------------------------------------------------------
 // These are some thrust calculations and conversions taken out of the velocity control 
@@ -301,6 +298,11 @@ _accelerationControl();
 	if (thrust_sp_xy_norm > thrust_max_xy) {
 		_thr_sp.xy() = thrust_sp_xy / thrust_sp_xy_norm * thrust_max_xy;
 	}
+
+
+}
+
+
 
 //-------------------------------------------------------------------------------------
 
