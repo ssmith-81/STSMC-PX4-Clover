@@ -185,6 +185,7 @@ private:
 	void _velocityControl(const float dt); ///< Velocity PID control
 	void _accelerationControl(); ///< Acceleration setpoint processing
 	void SMC_control(const float dt); // Sliding mode control (added in)
+	
 
 	// Gains
 	matrix::Vector3f _gain_pos_p; ///< Position control proportional gain
@@ -219,6 +220,10 @@ private:
 	float _yawspeed_sp{}; /** desired yaw-speed */
 
 	// STSMC controller definitions 
+
+	float pre_x_2d = 0;
+	float pre_y_2d = 0;
+	float pre_z_2d = 0;
 	
 	// Higher order sliding mode observer
 	float Uxx{};
@@ -227,4 +232,12 @@ private:
 	matrix::Vector3f x_hat;  /**<x-dynamic estimated state */
 	matrix::Vector3f y_hat;  /**<y-dynamic estimated state */
 	matrix::Vector3f z_hat;  /**<z-dynamic estimated state */
+
+	float sat_sxin{};
+	float sat_syin{};
+	float sat_szin{};
+
+	float sign_sx_int{};
+	float sign_sy_int{};
+	float sign_sz_int{};
 };

@@ -125,6 +125,8 @@ bool PositionControl::update(const float dt)
 	return valid;
 }
 
+
+
 void PositionControl::SMC_control(const float dt)
 {
 	#if STSMC
@@ -165,13 +167,30 @@ void PositionControl::SMC_control(const float dt)
 		sign_sz_int += k2z*sign(sz)*dt;
 	
 	// Define virtual controllers
-		float U_x = 0, U_y = 0, U_z = 0;
+		float Uxx = 0, Uyy = 0, Uzz = 0;
 	
 	float x_dot2d = (_vel_sp(0)-pre_vel_x)/dt;  // define pre values in hpp file as zerp
 	float y_dot2d = (_vel_sp(1) - pre_vel_y)/dt;
 	float z_dot2d = (_vel_sp(2) - pre_vel_z)/dt;
 	
-	U_x = -c1x*(e_2) + x_dot2d - k1x*sqrt(abs(sx))*sign(sx) - sign_sx_int;
+	Uxx = -c1x*(e_2(0)) + x_dot2d - k1x*sqrt(abs(sx))*sign(sx) - sign_sx_int;
+	Uyy = -c1y*(e_2(1)) + y_dot2d - k1y*sqrt(abs(sy))*sign(sy) - sign_sy_int;
+	Uzz = -c1z*(e_2(2)) + z_dot2d - k1z*sqrt(abs(sz))*sign(sz) - sign_sz_int;
+
+	pre_x_2d = _vel_sp(0);
+	pre_y_2d = _vel_sp(1);
+	pre_z_2d = _vel_sp(2);
+
+	// Gather virtual control inputs into a vector
+	Vector3f U = Vector3f(Uxx,Uyy,Uzz);
+
+	// Add these virtual control inputs to the acceleration setpoint (this is what the velocity PID controller produces)
+	// this setpoint is then converted to a thrust and attitude setpoint. This is what the non-linear 
+	// decoupling equations are supposed to do, not sure how to replace all these thrust conversions with the non-linear 
+	// decoupling equations yet...
+
+	// No control input from setpoints or corresponding states which are NAN
+ 	ControlMath::addIfNotNanVector3f(_acc_sp, U); // --> _acc_sp = _acc_sp + U  --> U becomes set point to be converted to a thrust and attitude
 
 
 	#endif
@@ -255,6 +274,36 @@ void PositionControl::SMC_control(const float dt)
 
 
 }
+
+_accelerationControl();
+
+//-----------------------------------------------------------------------------------
+// These are some thrust calculations and conversions taken out of the velocity control 
+// function that are needed:
+
+	// Saturate maximal vertical thrust
+	_thr_sp(2) = math::max(_thr_sp(2), -_lim_thr_max);
+
+	// Get allowed horizontal thrust after prioritizing vertical control
+	const float thrust_max_squared = _lim_thr_max * _lim_thr_max;
+	const float thrust_z_squared = _thr_sp(2) * _thr_sp(2);
+	const float thrust_max_xy_squared = thrust_max_squared - thrust_z_squared;
+	float thrust_max_xy = 0;
+
+	if (thrust_max_xy_squared > 0) {
+		thrust_max_xy = sqrtf(thrust_max_xy_squared);
+	}
+
+	// Saturate thrust in horizontal direction
+	const Vector2f thrust_sp_xy(_thr_sp);
+	const float thrust_sp_xy_norm = thrust_sp_xy.norm();
+
+	if (thrust_sp_xy_norm > thrust_max_xy) {
+		_thr_sp.xy() = thrust_sp_xy / thrust_sp_xy_norm * thrust_max_xy;
+	}
+
+//-------------------------------------------------------------------------------------
+
 //// Original PID position control module
 
 // void PositionControl::_positionControl()
@@ -330,18 +379,18 @@ void PositionControl::SMC_control(const float dt)
 // 	_vel_int(2) = math::min(fabsf(_vel_int(2)), CONSTANTS_ONE_G) * sign(_vel_int(2));
 // }
 
-// void PositionControl::_accelerationControl()
-// {
-// 	// Assume standard acceleration due to gravity in vertical direction for attitude generation
-// 	Vector3f body_z = Vector3f(-_acc_sp(0), -_acc_sp(1), CONSTANTS_ONE_G).normalized();
-// 	ControlMath::limitTilt(body_z, Vector3f(0, 0, 1), _lim_tilt);
-// 	// Scale thrust assuming hover thrust produces standard gravity
-// 	float collective_thrust = _acc_sp(2) * (_hover_thrust / CONSTANTS_ONE_G) - _hover_thrust;
-// 	// Project thrust to planned body attitude
-// 	collective_thrust /= (Vector3f(0, 0, 1).dot(body_z));
-// 	collective_thrust = math::min(collective_thrust, -_lim_thr_min);
-// 	_thr_sp = body_z * collective_thrust;
-// }
+void PositionControl::_accelerationControl()
+{
+	// Assume standard acceleration due to gravity in vertical direction for attitude generation
+	Vector3f body_z = Vector3f(-_acc_sp(0), -_acc_sp(1), CONSTANTS_ONE_G).normalized();
+	ControlMath::limitTilt(body_z, Vector3f(0, 0, 1), _lim_tilt);
+	// Scale thrust assuming hover thrust produces standard gravity
+	float collective_thrust = _acc_sp(2) * (_hover_thrust / CONSTANTS_ONE_G) - _hover_thrust;
+	// Project thrust to planned body attitude
+	collective_thrust /= (Vector3f(0, 0, 1).dot(body_z));
+	collective_thrust = math::min(collective_thrust, -_lim_thr_min);
+	_thr_sp = body_z * collective_thrust;
+}
 
 bool PositionControl::_inputValid()
 {

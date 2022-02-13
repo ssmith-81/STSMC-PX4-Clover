@@ -280,6 +280,12 @@ int main() {
     dist.open("dist.txt");
     est.open("x_hat.txt");
     step.open("time.txt");
+// Store values
+	FILE *data;
+
+	data = fopen("param.txt", "a");
+	
+	
 
  
 for (float i = 0; i < 10; i=i+0.02) {
@@ -322,6 +328,7 @@ for (float i = 0; i < 10; i=i+0.02) {
         step<< i <<endl;
         pos << SMC.x(0)<<endl;
         input << U <<endl;
+        fprintf(data, "%f\t  %f \n", SMC.x(1),SMC.ref);
      
         
          }
@@ -332,7 +339,7 @@ for (float i = 0; i < 10; i=i+0.02) {
          dist.close();
          est.close();
          step.close();
-        
+        fclose(data);
          
 return 0;
    

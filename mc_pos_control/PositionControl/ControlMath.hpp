@@ -46,6 +46,12 @@
 namespace ControlMath
 {
 /**
+ * Saturation block for SMC.
+ * @param k for sliding manifold
+ */
+float sat(const float &k);
+
+/**
  * Converts thrust vector and yaw set-point to a desired attitude.
  * @param thr_sp desired 3D thrust vector
  * @param yaw_sp the desired yaw

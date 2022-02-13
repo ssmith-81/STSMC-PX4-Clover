@@ -67,6 +67,18 @@ void limitTilt(Vector3f &body_unit, const Vector3f &world_unit, const float max_
 	body_unit = cosf(angle) * world_unit + sinf(angle) * rejection.unit();
 }
 
+// Saturation function (mine)
+float sat(const float &k){
+
+    if (fabs(k)< 1){
+		return k;
+
+	}
+    else{
+    return sign(k);
+	}
+}
+
 void bodyzToAttitude(Vector3f body_z, const float yaw_sp, vehicle_attitude_setpoint_s &att_sp)
 {
 	// zero vector, no direction, set safe level value
