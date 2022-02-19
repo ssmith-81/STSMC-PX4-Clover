@@ -229,9 +229,16 @@ private:
 	float Uxx{};
 	float Uyy{};
 	float Uzz{};
+	matrix::Vector3f U;
+	float u_x{};
+	float u_y{};
+	float u_z{};
 	matrix::Vector3f x_hat;  /**<x-dynamic estimated state */
 	matrix::Vector3f y_hat;  /**<y-dynamic estimated state */
 	matrix::Vector3f z_hat;  /**<z-dynamic estimated state */
+	float Ux{};
+	float Uy{};
+	float Uz{};
 
 	float sat_sxin{};
 	float sat_syin{};

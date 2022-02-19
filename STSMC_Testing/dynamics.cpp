@@ -10,7 +10,7 @@
 using namespace std;
 using namespace matrix;
 
-float _dt = 0.02; // time step --> Global variable.
+float _dt = 0.002; // time step --> Global variable.
 
 
  // Value Storing --> Set them globally so we can store values in any function 
@@ -288,7 +288,7 @@ int main() {
 	
 
  
-for (float i = 0; i < 10; i=i+0.02) {
+for (float i = 0; i < 10; i=i+0.002) {
 
     // Obtain reference trajectory
     SMC.ref = SMC.trajectory(i);
@@ -342,5 +342,9 @@ for (float i = 0; i < 10; i=i+0.02) {
         fclose(data);
          
 return 0;
+
+// Use the following to plot data (x and y axis) using gnuplot:
+
+// plot "<paste x_data.txt y_data.txt" with lines
    
 }
