@@ -45,11 +45,37 @@
 
 namespace ControlMath
 {
+	// My new functions for STSMC
+//--------------------------------------------------------------------------------------------------------------
+
 /**
  * Saturation block for SMC.
  * @param k for sliding manifold
  */
 float sat(const float &k);
+
+// These following two functions are just my attempt at building functions to do these conversions, although
+// they are not needed and not used. The do no not work but I am leaving them just for demonstration purposes
+/**
+ * Converts thrust vector and yaw set-point to a desired attitude.
+ * @param thrust_sp desired 3D thrust vector
+ * @param thrust_z desired vertical thrust 
+ * @param yaw_sp the desired yaw
+ * @param att_sp attitude setpoint to fill
+ */
+void thrustToAttitudeSMC(const matrix::Vector3f &thrust_sp,const float thrust_z, matrix::Vector3f U, const float yaw_sp, vehicle_attitude_setpoint_s &att_sp);
+
+/**
+ * Converts a body z vector and yaw set-point to a desired attitude.
+ * @param thrust_z desired vertical thrust
+ * @param U virtual control vector
+ * @param yaw_sp the desired yaw setpoint
+ * @param att_sp attitude setpoint to fill
+ */
+void EulerToAttitudeSMC(const float thrust_z, matrix::Vector3f U, const float yaw_sp, vehicle_attitude_setpoint_s &att_sp);
+
+
+//---------------------------------------------------------------------------------------------------------------
 
 /**
  * Converts thrust vector and yaw set-point to a desired attitude.

@@ -43,6 +43,7 @@
 #include <matrix/matrix/math.hpp>
 #include <uORB/topics/vehicle_attitude_setpoint.h>
 #include <uORB/topics/vehicle_local_position_setpoint.h>
+#include <fstream>
 
 struct PositionControlStates {
 	matrix::Vector3f position;
@@ -77,7 +78,10 @@ public:
 
 	PositionControl() = default;
 	~PositionControl() = default;
-
+		// STSMC parameters
+	//---------------------------------------------------------------------------------------------------------------
+	
+	//---------------------------------------------------------------------------------------------------------------
 	/**
 	 * Set the position control gains
 	 * @param P 3D vector of proportional gains for x,y,z axis
@@ -106,12 +110,6 @@ public:
 	 * @param max maximum thrust e.g. 0.9 or 1
 	 */
 	void setThrustLimits(const float min, const float max);
-
-	/**
-	 * Set margin that is kept for horizontal control when prioritizing vertical thrust
-	 * @param margin of normalized thrust that is kept for horizontal control e.g. 0.3
-	 */
-	void setHorizontalThrustMargin(const float margin);
 
 	/**
 	 * Set the maximum tilt angle in radians the output attitude is allowed to have
@@ -179,13 +177,12 @@ public:
 	void getAttitudeSetpoint(vehicle_attitude_setpoint_s &attitude_setpoint) const;
 
 private:
-	bool _inputValid();
+	bool _updateSuccessful();
 
 	void _positionControl(); ///< Position proportional control
 	void _velocityControl(const float dt); ///< Velocity PID control
 	void _accelerationControl(); ///< Acceleration setpoint processing
 	void SMC_control(const float dt); // Sliding mode control (added in)
-	
 
 	// Gains
 	matrix::Vector3f _gain_pos_p; ///< Position control proportional gain
@@ -199,7 +196,6 @@ private:
 	float _lim_vel_down{}; ///< Downwards velocity limit with feed forward and position control
 	float _lim_thr_min{}; ///< Minimum collective thrust allowed as output [-1,0] e.g. -0.9
 	float _lim_thr_max{}; ///< Maximum collective thrust allowed as output [-1,0] e.g. -0.1
-	float _lim_thr_xy_margin{}; ///< Margin to keep for horizontal control when saturating prioritized vertical thrust
 	float _lim_tilt{}; ///< Maximum tilt from level the output attitude is allowed to have
 
 	float _hover_thrust{}; ///< Thrust [0.1, 0.9] with which the vehicle hovers not accelerating down or up with level orientation
@@ -219,11 +215,30 @@ private:
 	float _yaw_sp{}; /**< desired heading */
 	float _yawspeed_sp{}; /** desired yaw-speed */
 
+	// If there is no velocity setpoint (through QGroundControl or using set_velocity function) 
+	//then you have to calculate the velocity setpoint from position setpoint as you would in Matlab/Simulink simulation
+	float pre_xdot_2di = 0;
+	float pre_ydot_2di = 0;
+	float pre_zdot_2di = 0;
+
+	matrix::Vector3f vel_spi; /**< desired velocity from desired position*/
+	float pos_xi = 0;
+	float pos_yi = 0;
+	float pos_zi = 0;
+
+
+	//STSMC controller gains
+	matrix::Vector3f _error_c; ///< STSMC error gain
+
 	// STSMC controller definitions 
 
-	float pre_x_2d = 0;
-	float pre_y_2d = 0;
-	float pre_z_2d = 0;
+	float sat_sxin{};
+	float sat_syin{};
+	float sat_szin{};
+
+	float sign_sx_int{};
+	float sign_sy_int{};
+	float sign_sz_int{};
 	
 	// Higher order sliding mode observer
 	float Uxx{};
@@ -233,18 +248,18 @@ private:
 	float u_x{};
 	float u_y{};
 	float u_z{};
-	matrix::Vector3f x_hat;  /**<x-dynamic estimated state */
-	matrix::Vector3f y_hat;  /**<y-dynamic estimated state */
-	matrix::Vector3f z_hat;  /**<z-dynamic estimated state */
+	matrix::Vector3f x_hat;
+	matrix::Vector3f y_hat;
+	matrix::Vector3f z_hat;
 	float Ux{};
 	float Uy{};
 	float Uz{};
 
-	float sat_sxin{};
-	float sat_syin{};
-	float sat_szin{};
+	float pre_xdot_2d = 0;
+	float pre_ydot_2d = 0;
+	float pre_zdot_2d = 0;
 
-	float sign_sx_int{};
-	float sign_sy_int{};
-	float sign_sz_int{};
+	// Nonlinear decoupling equations (Not needed as this equations are used)
+	float thrust_z{}; /**< Uz in quadcopter dynamics */ 
+	matrix::Vector3f thrust_sp; /**< thrust setpoint vector */
 };

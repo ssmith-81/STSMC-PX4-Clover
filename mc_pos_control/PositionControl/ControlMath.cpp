@@ -39,15 +39,66 @@
 #include <px4_platform_common/defines.h>
 #include <float.h>
 #include <mathlib/mathlib.h>
+#include <iostream>
+
+using namespace std;
 
 using namespace matrix;
 
 namespace ControlMath
 {
+
 void thrustToAttitude(const Vector3f &thr_sp, const float yaw_sp, vehicle_attitude_setpoint_s &att_sp)
 {
+	
 	bodyzToAttitude(-thr_sp, yaw_sp, att_sp);
 	att_sp.thrust_body[2] = -thr_sp.length();
+
+}
+
+// These following two functions are just my attempt at building functions to do these conversions, although
+// they are not needed and not used. The do no not work but I am leaving them just for demonstration purposes
+void thrustToAttitudeSMC(const Vector3f &thrust_sp, const float thrust_z, matrix::Vector3f U, const float yaw_sp, vehicle_attitude_setpoint_s &att_sp)
+{
+	// My thrust to attitude function for STSMC 
+//-------------------------------------------------------------------------------------------------------
+	// STSMC thrust to attitude conversion with non-linear decoupling equations
+	EulerToAttitudeSMC(thrust_z, U, yaw_sp, att_sp);
+	//att_sp.thrust_body[2] = -thrust_sp.length();
+}
+void EulerToAttitudeSMC(const float thrust_z, matrix::Vector3f U, const float yaw_sp, vehicle_attitude_setpoint_s &att_sp)
+{
+
+// Use non-linear decoupling equations to calculate the desired pith and roll angles, then use
+// these angles along with the yaw setpoint to determine the attitude setpoint in quarternions
+
+	float m =1.5; //kg: mass of quadcopter. Set as modifiable parameter later
+	float g = 9.8;
+	float Phi_d = asinf((m/thrust_z)*(U(0)*sinf(yaw_sp)-U(1)*cosf(yaw_sp))); // Roll set point
+	float Theta_d = atanf((1/(U(2)-g))*(U(0)*cosf(Phi_d)+U(1)*sinf(Phi_d)));   // Pitch set point
+
+	// Use the Quaternion.cpp math file in the matrix folder to convert the Euler angles to quarternions
+	Eulerf euler_sp;
+
+	// 3-2-1 Euler definitions:
+	euler_sp(0) = yaw_sp; //Psi or yaw
+	euler_sp(1) = Theta_d; // Theta or Pitch
+	euler_sp(2) = Phi_d; // Phi or roll/bank
+
+	//cout<<Phi_d<<" "<<euler_sp(2)<<" "<<U(0)<<" "<<U(1)<<" "<<U(2)<<" "<<thrust_z<<endl;
+	// Convert Euler angles to attitude setpoint in quarternions
+	const Quatf q_sp{euler_sp};
+	//cout<<q_sp(0)<<" "<<q_sp(1)<<" "<<q_sp(2)<<" "<<q_sp(3)<<endl;
+	//cout<<Phi_d<<" "<<Theta_d<<endl;
+
+	// copy quaternion setpoint to attitude setpoint topic --> uORB topic/struct
+	//q_sp.copyTo(att_sp.q_d);
+
+	// calculate euler angles, for logging only, must not be used for control
+	// att_sp.roll_body = Phi_d;
+	// att_sp.pitch_body = Theta_d;
+	// att_sp.yaw_body = yaw_sp;
+	
 }
 
 void limitTilt(Vector3f &body_unit, const Vector3f &world_unit, const float max_angle)
@@ -124,11 +175,15 @@ void bodyzToAttitude(Vector3f body_z, const float yaw_sp, vehicle_attitude_setpo
 	const Quatf q_sp{R_sp};
 	q_sp.copyTo(att_sp.q_d);
 
+	//cout<<q_sp(0)<<" "<<q_sp(1)<<" "<<q_sp(2)<<" "<<q_sp(3)<<endl;
+
 	// calculate euler angles, for logging only, must not be used for control
 	const Eulerf euler{R_sp};
 	att_sp.roll_body = euler.phi();
 	att_sp.pitch_body = euler.theta();
 	att_sp.yaw_body = euler.psi();
+
+	//cout<<euler.phi()<<" "<<euler.theta()<<endl;//" "<<thrust_z<<" "<<CONSTANTS_ONE_G<<endl;
 }
 
 Vector2f constrainXY(const Vector2f &v0, const Vector2f &v1, const float &max)
