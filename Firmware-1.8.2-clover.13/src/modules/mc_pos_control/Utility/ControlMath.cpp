@@ -160,5 +160,34 @@ vehicle_attitude_setpoint_s thrustToAttitude(const matrix::Vector3f &thr_sp, con
 
 	return att_sp;
 }
+
+// add these functions from newer firmware
+void addIfNotNan(float &setpoint, const float addition)
+{
+	if (PX4_ISFINITE(setpoint) && PX4_ISFINITE(addition)) {
+		// No NAN, add to the setpoint
+		setpoint += addition;
+
+	} else if (!PX4_ISFINITE(setpoint)) {
+		// Setpoint NAN, take addition
+		setpoint = addition;
+	}
+
+	// Addition is NAN or both are NAN, nothing to do
+}
+
+void addIfNotNanVector3f(Vector3f &setpoint, const Vector3f &addition)
+{
+	for (int i = 0; i < 3; i++) {
+		addIfNotNan(setpoint(i), addition(i));
+	}
+}
+
+void setZeroIfNanVector3f(Vector3f &vector)
+{
+	// Adding zero vector overwrites elements that are NaN with zero
+	addIfNotNanVector3f(vector, Vector3f());
+}
+
 }
 

@@ -68,4 +68,24 @@ float sign(float i);
  * @param max_angle maximum tilt angle between vectors in radians
  */
 void limitTilt(matrix::Vector3f &body_unit, const matrix::Vector3f &world_unit, const float max_angle);
+
+/**
+ * Adds e.g. feed-forward to the setpoint making sure existing or added NANs have no influence on control.
+ * This function is udeful to support all the different setpoint combinations of position, velocity, acceleration with NAN representing an uncommited value.
+ * @param setpoint existing possibly NAN setpoint to add to
+ * @param addition value/NAN to add to the setpoint
+ */
+void addIfNotNan(float &setpoint, const float addition);
+
+/**
+ * _addIfNotNan for Vector3f treating each element individually
+ * @see _addIfNotNan
+ */
+void addIfNotNanVector3f(matrix::Vector3f &setpoint, const matrix::Vector3f &addition);
+
+/**
+ * Overwrites elements of a Vector3f which are NaN with zero
+ * @param vector possibly containing NAN elements
+ */
+void setZeroIfNanVector3f(matrix::Vector3f &vector);
 }
