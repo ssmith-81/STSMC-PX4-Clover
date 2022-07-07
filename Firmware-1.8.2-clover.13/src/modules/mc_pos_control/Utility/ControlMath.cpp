@@ -44,6 +44,7 @@
 #include <float.h>
 #include <mathlib/mathlib.h>
 
+using namespace matrix;
 namespace ControlMath
 {
 
