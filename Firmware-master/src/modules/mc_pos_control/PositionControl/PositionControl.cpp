@@ -43,7 +43,9 @@
 
 using namespace matrix;
 
-#define STSMC true // turn controller on
+#define STSMC false // turn controller on
+// This is for the controller-observer pair:
+#define STSMC_HOSMO true// Turn on controller-observer pair
 using namespace ControlMath;
 
 PositionControl::PositionControl(ModuleParams *parent) :
@@ -218,104 +220,48 @@ bool PositionControl::_interfaceMapping()
 
 void PositionControl::SMC_control(const float &dt)
 {
- // Calculate acceleration of desired setpint for sliding mode controller:
- // Use this when a velocity setpoint is given
- float x_ddot2d = (_vel_sp(0) - pre_xdot_2d) / dt; // define pre values in hpp file as zero
- float y_ddot2d = (_vel_sp(1) - pre_ydot_2d) / dt;
- float z_ddot2d = (_vel_sp(2) - pre_zdot_2d) / dt;
- // Use this when only a position setpoint is given (numerically calculate velocity setpoint)
- vel_spi(0) = (_pos_sp(0)-pos_xi)/dt;
- vel_spi(1) = (_pos_sp(1)-pos_yi)/dt;
- vel_spi(2) = (_pos_sp(2)-pos_zi)/dt;
 
- float x_ddot2di = (vel_spi(0) - pre_xdot_2di) / dt; // define pre values in hpp file as zero
- float y_ddot2di = (vel_spi(1) - pre_ydot_2di) / dt;
- float z_ddot2di = (vel_spi(2) - pre_zdot_2di) / dt;
+ // Can use the cout statement below to check the values of the velocity setpoints.
+	 //cout<<_vel_sp(0)<<" "<<_vel_sp(1)<<" "<<_vel_sp(2)<<endl;
+
+	// Use this when only a position setpoint is given (numerically calculate velocity setpoint):
+	vel_spi(0) = (_pos_sp(0)-pos_xi)/dt;
+	vel_spi(1) = (_pos_sp(1)-pos_yi)/dt;
+	vel_spi(2) = (_pos_sp(2)-pos_zi)/dt;
+
+	// Older versions of the firmware have the velocity setpoint pre-set to zero (In simulation anyway) so the first && conditions take care of that case
+	// when they are all zero and unused; this uses the numerically calculated ones instead!
+	// Newer versions of the firmware (in simulation) have the velocity setpoints as NaN when not published too, therefore the || conditions take care of that and
+	// use the numerically calculated ones instead.
+ if ((fabs(_vel_sp(0)-0.0f)<1e-9f && fabs(_vel_sp(1)-0.0f)<1e-9f && fabs(_vel_sp(2)-0.0f)<1e-9f) || !PX4_ISFINITE(_vel_sp(0)) || !PX4_ISFINITE(_vel_sp(1)) || !PX4_ISFINITE(_vel_sp(2))) // comparing floats
+ {
+	// Use numerically calculated velocities
+	 _vel_sp = vel_spi;
+ }
+ else{
+	 // Use this when a velocity setpoint is given (such as commands from QGround Control
+	// or when the landing function is used, it provides velocity setpoints so the numerical ones
+	// are not needed).
+	 _vel_sp = _vel_sp;
+ }
+
+	// Calculate acceleration of desired setpint for sliding mode controller:
+
+	float x_ddot2d = (_vel_sp(0) - pre_xdot_2d) / dt; // define pre values in hpp file as zero
+	float y_ddot2d = (_vel_sp(1) - pre_ydot_2d) / dt;
+	float z_ddot2d = (_vel_sp(2) - pre_zdot_2d) / dt;
+
+	// These are not needed anymore, were used previously with the dual controller setup:
+	// float x_ddot2di = (vel_spi(0) - pre_xdot_2di) / dt; // define pre values in hpp file as zero
+	// float y_ddot2di = (vel_spi(1) - pre_ydot_2di) / dt;
+	// float z_ddot2di = (vel_spi(2) - pre_zdot_2di) / dt;
+
+	//cout<<_vel_sp(0)<<" "<<_vel_sp(1)<<" "<<_vel_sp(2)<<endl;
+
 #if STSMC
 
- if (!PX4_ISFINITE(_vel_sp(0)) || !PX4_ISFINITE(_vel_sp(1)) || !PX4_ISFINITE(_vel_sp(2)))
- {
-     // Position controller gains
+	 //************* Start of controller:
 
- // float k1x = 3, k2x = 4;
- // float k1y = 3, k2y = 3;
- // float k1z = 4, k2z = 3;
- // Tuning notes:
- // Increasing k1 makes it more responsive in the plane but also very jittery once it is around like 2
-
- //Increasing k2x or k2y makes it wobble heavily in that plane so it will keep moving bck and forth
- float k1x = 1, k2x = 0.25; // 0.25
- float k1y = 1, k2y = 0.25;
- float k1z = 3, k2z = 0.8;
-
- //Error gains
- //float c1x = 3, c1y = 3, c1z = 3;
-
- float c1x = 2, c1y = 2, c1z = 1;
-
- // Sliding manifold
- // Error definitions:
- Vector3f e_1 = _pos - _pos_sp; //x(0)-x_1d;
- Vector3f e_2 = _vel - vel_spi; //x(1) - x_2d;
-
- float sx = c1x * e_1(0) + (e_2(0));
- float sy = c1y * e_1(1) + (e_2(1));
- float sz = c1z * e_1(2) + (e_2(2));
-
- // Use saturation function instead of sign function
- float sat_sx = ControlMath::sat(sx);
- float sat_sy = ControlMath::sat(sy);
- float sat_sz = ControlMath::sat(sz);
-
- sat_sxin += sat_sx * dt;
- sat_syin += sat_sy * dt;
- sat_szin += sat_sz * dt;
-
- //Switching control terms
- sign_sx_int += k2x * sign(sx) * dt;
- sign_sy_int += k2y * sign(sy) * dt;
- sign_sz_int += k2z * sign(sz) * dt;
-
- // Define virtual controllers
- //float U_x = 0, U_y = 0, U_z = 0;
-
- // Uxx = 0.0f;
- // Uyy = 0.0f;
- // Uzz = 0.0f;
-
-
- Uxx = -c1x * (e_2(0)) + x_ddot2di - k1x * sqrt(fabsf(sx)) * sign(sx) - sign_sx_int;
- Uyy = -c1y * (e_2(1)) + y_ddot2di - k1y * sqrt(fabsf(sy)) * sign(sy) - sign_sy_int;
- Uzz = -c1z * (e_2(2)) + z_ddot2di - k1z * sqrt(fabsf(sz)) * sign(sz) - sign_sz_int;
-
- if (!PX4_ISFINITE(Uxx) || !PX4_ISFINITE(Uyy) || !PX4_ISFINITE(Uzz))
- { // Use PX4 module
-     Uxx = 0.0f;
-     Uyy = 0.0f;
-     Uzz = 0.0f;
- }
-
- //cout<<e_2(2)<<" "<<z_dot2d<<" "<<sz<<" "<<sign_sz_int<<" "<<Uzz<<" "<<Uyy<<" "<<Uxx<<endl;
-
- // Save references to previous references:
- pre_xdot_2di = vel_spi(0);
- pre_ydot_2di = vel_spi(1);
- pre_zdot_2di = vel_spi(2);
- pos_xi = _pos_sp(0);
- pos_yi = _pos_sp(1);
- pos_zi = _pos_sp(2);
- //cout << _pos(0)<<" "<<_pos_sp(0)<<" "<<_vel(0)<<" "<<vel_spi(0)<<endl;
- //cout << _pos(2)<<" "<<_pos_sp(2)<<" "<<_vel(2)<<" "<<vel_spi(2)<<endl;
-
- // Gather virtual control inputs into a vector
- U = Vector3f(Uxx, Uyy, Uzz);
-
- // Add these virtual control inputs to the acceleration setpoint (this is what the velocity PID controller produces)
- // this setpoint is then converted to a thrust and attitude setpoint. This is what the non-linear
- // decoupling equations are supposed to do, but PX4 takes advantage of quadcopter dynamics being differentially flat and use other methods.
- }
- else
- {
  // Position controller gains
 
  // float k1x = 3, k2x = 4;
@@ -364,9 +310,9 @@ void PositionControl::SMC_control(const float &dt)
  // Uyy = 0.0f;
  // Uzz = 0.0f;
 
- Uxx = -c1x * (e_2(0)) + x_ddot2d - k1x * sqrt(fabsf(sx)) * sign(sx) - sign_sx_int;
- Uyy = -c1y * (e_2(1)) + y_ddot2d - k1y * sqrt(fabsf(sy)) * sign(sy) - sign_sy_int;
- Uzz = -c1z * (e_2(2)) + z_ddot2d - k1z * sqrt(fabsf(sz)) * sign(sz) - sign_sz_int;
+ Uxx = -c1x * (e_2(0)) + x_ddot2d - k1x * sqrt(abs(sx)) * sign(sx) - sign_sx_int;
+ Uyy = -c1y * (e_2(1)) + y_ddot2d - k1y * sqrt(abs(sy)) * sign(sy) - sign_sy_int;
+ Uzz = -c1z * (e_2(2)) + z_ddot2d - k1z * sqrt(abs(sz)) * sign(sz) - sign_sz_int;
 
  if (!PX4_ISFINITE(Uxx) || !PX4_ISFINITE(Uyy) || !PX4_ISFINITE(Uzz))
  { // Use PX4 module
@@ -375,12 +321,22 @@ void PositionControl::SMC_control(const float &dt)
      Uzz = 0.0f;
  }
 
- //cout<<e_2(2)<<" "<<z_dot2d<<" "<<sz<<" "<<sign_sz_int<<" "<<Uzz<<" "<<Uyy<<" "<<Uxx<<endl;
+ //cout<<_vel_sp(0)<<" "<<_vel_sp(1)<<" "<<_vel_sp(2)<<" "<<!PX4_ISFINITE(_vel_sp(0))<<endl;
 
  // Save references to previous references:
  pre_xdot_2d = _vel_sp(0);
  pre_ydot_2d = _vel_sp(1);
  pre_zdot_2d = _vel_sp(2);
+
+ // Save references to previous references for numerical calculations:
+ pos_xi = _pos_sp(0);
+ pos_yi = _pos_sp(1);
+ pos_zi = _pos_sp(2);
+
+ // Not needed anymore:
+ //  pre_xdot_2di = vel_spi(0);
+ //  pre_ydot_2di = vel_spi(1);
+ //  pre_zdot_2di = vel_spi(2);
  //cout << _pos(2)<<_pos_sp(2)<<_vel(2)<<_vel_sp(2)<<endl;
 
  // Gather virtual control inputs into a vector
@@ -389,15 +345,171 @@ void PositionControl::SMC_control(const float &dt)
  // Add these virtual control inputs to the acceleration setpoint (this is what the velocity PID controller produces)
  // this setpoint is then converted to a thrust and attitude setpoint. This is what the non-linear
  // decoupling equations are supposed to do, but PX4 takes advantage of quadcopter dynamics being differentially flat and use other methods.
- }
+
 #endif
+
+//****************************************************************************************
+
+	#if STSMC_HOSMO
+
+
+			// Position controller gains
+
+		// float k1x = 3, k2x = 4;
+		// float k1y = 3, k2y = 3;
+		// float k1z = 4, k2z = 3;
+		// Tuning notes:
+		// Increasing k1 makes it more responsive in the plane but also very jittery once it is around like 2
+
+		//Increasing k2x or k2y makes it wobble heavily in that plane so it will keep moving bck and forth
+		float k1x = 1, k2x = 0.3; // 0.25
+		float k1y = 1, k2y = 0.3;
+		float k1z = 1, k2z = 1.5;
+
+		// Observer gains
+		float lambda1x = 5, lambda2x = 20, lambda3x = 0.5;
+		float lambda1y = 5, lambda2y = 20, lambda3y = 7;
+		float lambda1z = 5, lambda2z = 20, lambda3z = 7;
+
+		//Error gains
+		//float c1x = 0.75, c1y = 0.75, c1z = 1;
+
+		float c1x = 0.75, c1y = 0.75, c1z = 1;
+
+		// Observer based control
+
+
+		// Set the estimation (observer) initial conditions. Overwrties any elements of a Vector3f which are
+		// NaN with zero
+		ControlMath::setZeroIfNanVector3f(x_hat); /**<x-dynamic estimated states */
+		ControlMath::setZeroIfNanVector3f(y_hat); /**<y-dynamic estimated states */
+		ControlMath::setZeroIfNanVector3f(z_hat); /**<z-dynamic estimated states */
+
+		// Define estimation errors
+		float x_tilde = _pos(0) - x_hat(0);
+		float y_tilde = _pos(1) - y_hat(0);
+		float z_tilde = _pos(2) - z_hat(0);
+
+		// Define saturation functions (smoothing functions) to replace sign(s) in virtual controllers
+		// float epsilon = 0.000001;
+		// float sat_z = ControlMath::sat(z_tilde/epsilon);
+
+		// Compute estimates with observer
+		if (!PX4_ISFINITE(Ux) || !PX4_ISFINITE(Uy) || !PX4_ISFINITE(Uz))
+		{ // Use PX4 module
+			Ux = 0.0f;
+			Uy = 0.0f;
+			Uz = 0.0f;
+		}
+
+		u_x = Ux;
+		u_y = Uy;
+		u_z = Uz;
+
+		// x-dynamics observer  // x_hat += x_hat... --> integral
+		x_hat(0) = x_hat(0) + (x_hat(1) * dt) + lambda1x * cbrt(fabsf(x_tilde) * fabsf(x_tilde)) * sign(x_tilde) * dt;
+		x_hat(1) = x_hat(1) + (x_hat(2) * dt) + lambda2x * cbrt(fabsf(x_tilde)) * sign(x_tilde) * dt + (u_x)*dt;
+		x_hat(2) = x_hat(2) + lambda3x * sign(x_tilde) * dt;
+		//x_hat(2) = x_hat(2) + lambda3x*sat_x*dt;  // Disturbance estimation with smoothing function
+		// y-dynamics observer
+		y_hat(0) = y_hat(0) + (y_hat(1) * dt) + lambda1y * cbrt(fabsf(y_tilde) * fabsf(y_tilde)) * sign(y_tilde) * dt;
+		y_hat(1) = y_hat(1) + (y_hat(2) * dt) + lambda2y * cbrt(fabsf(y_tilde)) * sign(y_tilde) * dt + (u_y)*dt;
+		y_hat(2) = y_hat(2) + lambda3y * sign(y_tilde) * dt;
+		//y_hat(2) = y_hat(2) + lambda3y*sat_y*dt;  // Disturbance estimation with smoothing function
+		// z-dynamics observer**
+		z_hat(0) = z_hat(0) + (z_hat(1) * dt) + lambda1z * cbrt(fabsf(z_tilde) * fabsf(z_tilde)) * sign(z_tilde) * dt;
+		z_hat(1) = z_hat(1) + (z_hat(2) * dt) + lambda2z * cbrt(fabsf(z_tilde)) * sign(z_tilde) * dt + (u_z)*dt;
+		z_hat(2) = z_hat(2) + lambda3z * sign(z_tilde) * dt;
+		//z_hat(2) = z_hat(2) + lambda3z*sat_z*dt;  // Disturbance estimation with smoothing function
+
+		// Sliding manifold
+		// Error definitions:
+		float error_x = _pos(0) - _pos_sp(0);
+		float error_y = _pos(1) - _pos_sp(1);
+		float error_z = _pos(2) - _pos_sp(2); //z(0)-z_1d;
+
+		// For non observer based STSMC altitude controller
+		//Vector3f e_2 = _vel - _vel_sp; //x(1) - x_2d;
+
+		float sx = c1x * error_x + (x_hat(1) - _vel_sp(0));
+		float sy = c1y * error_y + (y_hat(1) - _vel_sp(1));
+		// Use observer for z-dynamics
+		float sz = c1z*error_z + (z_hat(1)-_vel_sp(2));
+		// Use super twisting sliding mode controller only based on sensor feedback for z-dynamic (No Observer)
+		//float sz = c1z * error_z + (_vel(2) - _vel_sp(2))
+
+
+		//Switching control terms
+		sign_sx_int += k2x * sign(sx) * dt;
+		sign_sy_int += k2y * sign(sy) * dt;
+		sign_sz_int += k2z * sign(sz) * dt;
+
+		// Saturation instead of sign for switching control portion. (can use if you would like)
+		//flooat sat_sx = ControlMath::sat(sx);
+		//flat sat_sy = ControlMath::sat(sy);
+		//float sat_sz = ControlMath::sat(sz);
+		//Integral terms for controllers
+		//sat_sx_int += k2x*sat_sx*dt
+		//sat_sy_int += k2y*sat_sy*dt
+		//sat_sz_int += k2z*sat_sz*dt
+
+		// Define virtual controllers
+		// float Ux = 0;
+		// float Uy = 0;
+		// float Uz = 0;
+
+		Ux = -c1x * x_hat(1) + c1x * _vel_sp(0) - x_hat(2) - lambda2x * cbrt(fabsf(x_tilde)) * sign(x_tilde) * dt + x_ddot2d - k1x * sqrt(fabs(sx)) * sign(sx) - sign_sx_int;
+		Uy = -c1y * y_hat(1) + c1y * _vel_sp(1) - y_hat(2) - lambda2y * cbrt(fabsf(y_tilde)) * sign(y_tilde) * dt + y_ddot2d - k1y * sqrt(fabs(sy)) * sign(sy) - sign_sy_int;
+
+		// Altitude controller:
+		// Based on observer:
+		Uz = -c1z*z_hat(1) + c1z*_vel_sp(2) - z_hat(2) - lambda2z*cbrt(fabsf(z_tilde))*sign(z_tilde)*dt + z_ddot2d - k1z*sqrt(fabs(sz))*sign(sz) - sign_sz_int;
+		// STSMC with no Observer
+		//Uz = -c1z * (e_2(2)) + z_ddot2d - k1z * sqrt(abs(sz)) * sign(sz) - sign_sz_int;
+
+		// Save references to previous references:
+		pre_xdot_2d = _vel_sp(0);
+		pre_ydot_2d = _vel_sp(1);
+		pre_zdot_2d = _vel_sp(2);
+
+		// Save references to previous references for numerical calculations:
+		pos_xi = _pos_sp(0);
+		pos_yi = _pos_sp(1);
+		pos_zi = _pos_sp(2);
+
+		// Not needed anymore:
+		//  pre_xdot_2di = vel_spi(0);
+		//  pre_ydot_2di = vel_spi(1);
+		//  pre_zdot_2di = vel_spi(2);
+		//cout << _pos(2)<<_pos_sp(2)<<_vel(2)<<_vel_sp(2)<<endl;
+
+		if (!PX4_ISFINITE(Ux) || !PX4_ISFINITE(Uy) || !PX4_ISFINITE(Uz))
+		{ // Use PX4 module
+			Ux = 0.0f;
+			Uy = 0.0f;
+			Uz = 0.0f;
+		}
+
+		//cout<<_pos(0)-x_hat(0)<<" "<<_vel(0)-x_hat(1)<<" "<<x_hat(2)<<" "<<Ux<<" "<<Uy<<endl;
+
+		// Gather virtual control inputs into a vector
+		U = Vector3f(Ux, Uy, Uz);
+
+		// Add these virtual control inputs to the acceleration setpoint (this is what the velocity PID controller produces)
+ 		// this setpoint is then converted to a thrust and attitude setpoint. This is what the non-linear
+ 		// decoupling equations are supposed to do, but PX4 takes advantage of quadcopter dynamics being differentially flat and use other methods.
+
+
+
+		#endif
+	//*****************************************************************************************
 
 //Acceleration control function from newer PX4 firmware
 //Assume standard acceleration due to gravity in vertical direction for attitude generation
 	//Vector3f body_z = Vector3f(-_acc_sp(0), -_acc_sp(1), CONSTANTS_ONE_G).normalized();
 	float CONSTANTS_ONE_G = 9.81; // Gravitational constant
 	Vector3f body_z = Vector3f(-U(0), -U(1), CONSTANTS_ONE_G).normalized();
-	
+
 	float _lim_tilt = _constraints.tilt;  // max tilt in radians
 	ControlMath::limitTilt(body_z, Vector3f(0, 0, 1), _lim_tilt);
 	float _hover_thrust = _param_mpc_thr_hover.get();
@@ -423,14 +535,14 @@ void PositionControl::SMC_control(const float &dt)
 	// Saturate thrust setpoint in D-direction.
 	_thr_sp(2) = math::constrain(_thr_sp(2), uMin, uMax);
 
-	
+
 	// Thrust set-point in NE-direction is already provided. Only
 	// scaling by the maximum tilt is required.
 	float thr_xy_max = fabsf(_thr_sp(2)) * tanf(_constraints.tilt);
 	_thr_sp(0) *= thr_xy_max;
 	_thr_sp(1) *= thr_xy_max;
-	
-	
+
+
 }
 
 //-------------------------------------------------------------------------------------
