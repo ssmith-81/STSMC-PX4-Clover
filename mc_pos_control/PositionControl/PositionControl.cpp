@@ -274,7 +274,7 @@ void PositionControl::SMC_control(const float dt)
 	// These logging commands dont work:
 	//FILE *data = fopen("STSMC.txt", "a");
 	//fprintf(data, "%f\t  %f\t  %f\t  \n", (double)Uxx, (double)Uyy, (double)Uzz);
-	}
+	
 #endif
 
 	//****************************************************************************************
